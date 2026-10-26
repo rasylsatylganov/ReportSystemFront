@@ -1,0 +1,133 @@
+:root {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    font-size: 14px;
+    color: #24384d;
+    background: #eef3f8;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+
+    // Светло-голубая палитра из приложенного проекта.
+    --app-background: #eef3f8;
+    --app-panel: #f4f8fd;
+    --app-workspace: #f9fbfe;
+    --app-border: #bfd1e3;
+    --app-text: #24384d;
+    --app-brand: #2b5f8f;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    min-width: 320px;
+    color: var(--app-text);
+    background: var(--app-background);
+}
+
+button, input, textarea, select {
+    font: inherit;
+}
+
+.app-layout {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.app-header {
+    padding: 16px 20px 0;
+
+    .p-menubar {
+        min-height: 64px;
+        padding: 10px 16px;
+        border: 1px solid var(--app-border);
+        border-radius: 4px;
+        background: var(--app-panel);
+        box-shadow: none;
+        gap: 16px;
+    }
+
+    .p-menubar-end {
+        margin-left: auto;
+    }
+}
+
+.app-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--app-brand);
+    text-decoration: none;
+    font-size: 17px;
+    font-weight: 600;
+
+    > .pi {
+        font-size: 25px;
+    }
+}
+
+.app-content {
+    display: flex;
+    flex: 1;
+    padding: 16px 20px 20px;
+}
+
+.workspace {
+    flex: 1;
+    min-width: 0;
+    min-height: 400px;
+    padding: 20px;
+    border: 1px solid var(--app-border);
+    border-radius: 4px;
+    background: var(--app-workspace);
+}
+
+// Меню пока пустое: не показываем мобильную кнопку раскрытия пустого списка.
+.app-header .p-menubar:has(.p-menubar-root-list:empty) .p-menubar-button {
+    display: none;
+}
+
+:root.darken {
+    color-scheme: dark;
+    --app-background: #101820;
+    --app-panel: #1b2937;
+    --app-workspace: #17222e;
+    --app-border: #354b60;
+    --app-text: #e2e8f0;
+    --app-brand: #a8cff0;
+}
+
+@media (max-width: 640px) {
+    .app-header {
+        padding: 10px 10px 0;
+
+        .p-menubar {
+            padding: 8px 10px;
+            gap: 8px;
+        }
+
+        .p-menubar-start {
+            flex: 1;
+            min-width: 0;
+        }
+    }
+
+    .app-brand {
+        gap: 8px;
+        font-size: 14px;
+
+        > .pi {
+            font-size: 21px;
+        }
+    }
+
+    .app-content {
+        padding: 10px;
+    }
+
+    .workspace {
+        padding: 12px;
+    }
+}
