@@ -1,6 +1,7 @@
 // Поля соответствуют Java Entity DrTypePeriod и JSON вашего контроллера.
 export interface DrTypePeriod {
     id: number;
+    sortIndex: number;
     codeTypePeriod: string;
     nameTypePeriod: string;
 }

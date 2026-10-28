@@ -27,6 +27,14 @@ export const drTypePeriodService = {
         });
     },
 
+    moveUp(id: number): Promise<void> {
+        return http<void>(`${URL}/${id}/move-up`, { method: 'POST' });
+    },
+
+    moveDown(id: number): Promise<void> {
+        return http<void>(`${URL}/${id}/move-down`, { method: 'POST' });
+    },
+
     remove(id: number): Promise<void> {
         return http<void>(`${URL}/${id}`, { method: 'DELETE' });
     },

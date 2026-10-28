@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import Button from 'primevue/button';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
@@ -13,6 +13,15 @@ import { drTypePeriodService } from '@/core/services/dr-type-period.service';
 const periods = ref<DrTypePeriod[]>([]);
 const loading = ref(false);
 const pageError = ref('');
+const movingId = ref<number | null>(null);
+const first = ref(0);
+const pageSize = ref(10);
+
+// Порядок всегда определяется SORT_INDEX. ID используется для стабильности при равных индексах.
+const orderedPeriods = computed(() => [...periods.value].sort(
+    (a, b) => a.sortIndex - b.sortIndex || a.id - b.id
+));
+
 const successMessage = ref('');
 
 // Одна форма используется для создания и редактирования.
@@ -35,16 +44,21 @@ function errorMessage(error: unknown): string {
 }
 
 async function loadPeriods() {
-    if (loading.value) return;
+    if (loading.value) return false;
     loading.value = true;
     pageError.value = '';
     try {
         const result = await drTypePeriodService.getAll();
         if (!Array.isArray(result)) throw new Error('Ожидался список типов периодов от backend.');
         periods.value = result;
+        if (first.value >= result.length) {
+            first.value = Math.max(0, Math.ceil(result.length / pageSize.value) - 1) * pageSize.value;
+        }
+        return true;
     } catch (error) {
         // Ошибку показываем отдельно: она не должна выглядеть как пустой справочник.
         pageError.value = errorMessage(error);
+        return false;
     } finally {
         loading.value = false;
     }
@@ -129,6 +143,32 @@ async function deletePeriod() {
     }
 }
 
+// Соседнюю запись определяет backend по полному актуальному списку.
+async function movePeriod(period: DrTypePeriod, direction: 'up' | 'down') {
+    if (movingId.value !== null || loading.value || saving.value || deleting.value) return;
+    movingId.value = period.id;
+    pageError.value = '';
+    successMessage.value = '';
+    try {
+        if (direction === 'up') {
+            await drTypePeriodService.moveUp(period.id);
+        } else {
+            await drTypePeriodService.moveDown(period.id);
+        }
+        const loaded = await loadPeriods();
+        if (loaded) {
+            // При переходе через границу страниц показываем страницу перемещённой записи.
+            const index = orderedPeriods.value.findIndex(item => item.id === period.id);
+            if (index >= 0) first.value = Math.floor(index / pageSize.value) * pageSize.value;
+            successMessage.value = 'Порядок изменён.';
+        }
+    } catch (error) {
+        pageError.value = errorMessage(error);
+    } finally {
+        movingId.value = null;
+    }
+}
+
 // Запрос списка выполняется после открытия страницы.
 onMounted(loadPeriods);
 </script>
@@ -139,33 +179,46 @@ onMounted(loadPeriods);
             <h1>Типы периодов</h1>
             <div class="period-actions">
                 <Button label="Обновить" icon="pi pi-refresh" severity="secondary"
-                        :loading="loading" :disabled="saving || deleting" @click="loadPeriods" />
+                        :loading="loading" :disabled="saving || deleting || movingId !== null" @click="loadPeriods" />
                 <Button label="Добавить" icon="pi pi-plus"
-                        :disabled="loading || saving || deleting" @click="openCreate" />
+                        :disabled="loading || saving || deleting || movingId !== null" @click="openCreate" />
             </div>
         </div>
 
         <Message v-if="successMessage" severity="success" :closable="false">{{ successMessage }}</Message>
         <Message v-if="pageError" severity="error" :closable="false">{{ pageError }}</Message>
 
-        <DataTable :value="periods" :loading="loading" data-key="id" striped-rows show-gridlines
-                   paginator :rows="10" :rows-per-page-options="[10, 25, 50]"
-                   sort-field="id" :sort-order="1" :table-style="{ minWidth: '42rem' }">
+        <DataTable :value="orderedPeriods" :loading="loading" data-key="id" striped-rows show-gridlines
+                   paginator v-model:first="first" v-model:rows="pageSize" :rows-per-page-options="[10, 25, 50]" :table-style="{ minWidth: '42rem' }">
             <template #empty>
                 {{ pageError ? 'Не удалось обновить данные. Нажмите «Обновить» после устранения ошибки.' : 'Типы периодов пока не добавлены.' }}
             </template>
-            <Column field="id" header="ID" sortable style="width: 6rem" />
-            <Column field="codeTypePeriod" header="Код" sortable style="width: 10rem" />
-            <Column field="nameTypePeriod" header="Наименование" sortable />
+            <Column field="id" header="ID" style="width: 6rem" />
+            <Column field="codeTypePeriod" header="Код" style="width: 10rem" />
+            <Column field="nameTypePeriod" header="Наименование" />
+            <Column header="Порядок" style="width: 6rem">
+                <template #body="{ data }">
+                    <div class="period-order-actions">
+                        <Button icon="pi pi-arrow-up" text severity="secondary"
+                                :aria-label="`Сдвинуть вверх ${data.codeTypePeriod}`" title="Сдвинуть вверх"
+                                :disabled="loading || saving || deleting || movingId !== null || orderedPeriods[0]?.id === data.id"
+                                @click="movePeriod(data, 'up')" />
+                        <Button icon="pi pi-arrow-down" text severity="secondary"
+                                :aria-label="`Сдвинуть вниз ${data.codeTypePeriod}`" title="Сдвинуть вниз"
+                                :disabled="loading || saving || deleting || movingId !== null || orderedPeriods[orderedPeriods.length - 1]?.id === data.id"
+                                @click="movePeriod(data, 'down')" />
+                    </div>
+                </template>
+            </Column>
             <Column header="Действия" style="width: 9rem">
                 <template #body="{ data }">
                     <div class="period-actions">
                         <Button icon="pi pi-pencil" severity="secondary" text
                                 :aria-label="`Редактировать ${data.codeTypePeriod}`" title="Редактировать"
-                                :disabled="loading || saving || deleting" @click="openEdit(data)" />
+                                :disabled="loading || saving || deleting || movingId !== null" @click="openEdit(data)" />
                         <Button icon="pi pi-trash" severity="danger" text
                                 :aria-label="`Удалить ${data.codeTypePeriod}`" title="Удалить"
-                                :disabled="loading || saving || deleting" @click="openDelete(data)" />
+                                :disabled="loading || saving || deleting || movingId !== null" @click="openDelete(data)" />
                     </div>
                 </template>
             </Column>
@@ -222,6 +275,8 @@ onMounted(loadPeriods);
 .period-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
 h1 { margin: 0; font-size: 23px; font-weight: 600; color: var(--app-brand); }
 .period-actions { display: flex; align-items: center; gap: 8px; }
+.period-order-actions { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.period-order-actions :deep(.p-button) { width: 2rem; height: 1.7rem; padding: 0; }
 .period-form { display: flex; flex-direction: column; gap: 20px; }
 .period-field { display: flex; flex-direction: column; gap: 6px; }
 .period-field label { font-weight: 600; }
