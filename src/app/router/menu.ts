@@ -26,6 +26,7 @@ export const APP_MENU: MenuItem[] = [
                 icon: 'pi pi-list',
                 items: [
                     { label: 'Справочники', route: '/references' },
+                    { label: 'Значения справочников', route: '/reference-items' },
                 ],
             },
         ],

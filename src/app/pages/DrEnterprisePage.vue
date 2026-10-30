@@ -7,7 +7,6 @@ import Dialog from 'primevue/dialog';
 import InputText from 'primevue/inputtext';
 import Message from 'primevue/message';
 import Select from 'primevue/select';
-import Tag from 'primevue/tag';
 import type { DrEnterprise, DrEnterpriseRequest } from '@/core/models/dr-enterprise.model';
 import type { DrTypeEnterprise } from '@/core/models/dr-type-enterprise.model';
 import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS } from '@/core/models/page.model';
@@ -64,8 +63,14 @@ async function loadTypes() {
             if (++page >= response.totalPages) break;
         }
         types.value = result;
+        if (!result.some(type => type.id === selectedType.value)) {
+            selectedType.value = result[0]?.id ?? null;
+            first.value = 0;
+        }
+        return true;
     } catch (error) {
         typesError.value = errorMessage(error);
+        return false;
     } finally {
         typesLoading.value = false;
     }
@@ -74,6 +79,13 @@ async function loadTypes() {
 async function loadEnterprises() {
     const version = ++loadVersion;
     const filter = selectedType.value;
+    if (filter === null) {
+        enterprises.value = [];
+        totalRecords.value = 0;
+        first.value = 0;
+        loading.value = false;
+        return false;
+    }
     loading.value = true;
     pageError.value = '';
     try {
@@ -101,7 +113,14 @@ async function loadEnterprises() {
 }
 
 async function refresh() {
-    await Promise.all([loadTypes(), loadEnterprises()]);
+    ++loadVersion;
+    if (await loadTypes()) {
+        await loadEnterprises();
+    } else {
+        enterprises.value = [];
+        totalRecords.value = 0;
+        loading.value = false;
+    }
 }
 
 async function changeFilter() {
@@ -226,8 +245,8 @@ onMounted(refresh);
         <div class="enterprise-filter">
             <label for="enterprise-filter">Тип предприятия</label>
             <Select input-id="enterprise-filter" v-model="selectedType" :options="types"
-                    option-label="nameTypeEnterprise" option-value="id" placeholder="Все типы"
-                    filter show-clear :loading="typesLoading" :disabled="busy || typesLoading || !!typesError"
+                    option-label="nameTypeEnterprise" option-value="id" placeholder="Выберите тип предприятия"
+                    filter :loading="typesLoading" :disabled="busy || typesLoading || !!typesError"
                     empty-filter-message="Типы не найдены" @change="changeFilter" />
         </div>
         <DataTable :value="enterprises" :loading="loading" data-key="id" striped-rows show-gridlines
@@ -235,8 +254,7 @@ onMounted(refresh);
                    :rows-per-page-options="PAGE_SIZE_OPTIONS" @page="changePage"
                    paginator-template="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink RowsPerPageDropdown CurrentPageReport"
                    current-page-report-template="{first}–{last} из {totalRecords}" :table-style="{ minWidth: '48rem' }">
-            <template #empty>{{ pageError ? 'Не удалось загрузить предприятия. Нажмите «Обновить».' : selectedType ? 'Для выбранного типа предприятия пока не добавлены.' : 'Предприятия пока не добавлены.' }}</template>
-            <Column header="Тип предприятия"><template #body="{ data }"><Tag :value="data.typeEnterprise.nameTypeEnterprise" severity="secondary" /></template></Column>
+            <template #empty>{{ pageError ? 'Не удалось загрузить предприятия. Нажмите «Обновить».' : typesError ? 'Не удалось загрузить типы предприятий. Нажмите «Обновить».' : selectedType ? 'Для выбранного типа предприятия пока не добавлены.' : 'Сначала добавьте тип предприятия.' }}</template>
             <Column field="codeEnterprise" header="Код" />
             <Column field="nameEnterprise" header="Наименование" />
             <Column header="Действия" style="width: 8rem">

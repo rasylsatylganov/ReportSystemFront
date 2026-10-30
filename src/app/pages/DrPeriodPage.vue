@@ -8,7 +8,6 @@ import Dialog from 'primevue/dialog';
 import InputText from 'primevue/inputtext';
 import Message from 'primevue/message';
 import Select from 'primevue/select';
-import Tag from 'primevue/tag';
 import type { DrPeriod, DrPeriodRequest } from '@/core/models/dr-period.model';
 import type { DrTypePeriod } from '@/core/models/dr-type-period.model';
 import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS } from '@/core/models/page.model';
@@ -81,8 +80,14 @@ async function loadTypes() {
             if (++page >= response.totalPages) break;
         }
         types.value = result;
+        if (!result.some(type => type.id === selectedType.value)) {
+            selectedType.value = result[0]?.id ?? null;
+            first.value = 0;
+        }
+        return true;
     } catch (error) {
         typesError.value = errorMessage(error);
+        return false;
     } finally {
         typesLoading.value = false;
     }
@@ -91,6 +96,13 @@ async function loadTypes() {
 async function loadPeriods() {
     const version = ++loadVersion;
     const filter = selectedType.value;
+    if (filter === null) {
+        periods.value = [];
+        totalRecords.value = 0;
+        first.value = 0;
+        loading.value = false;
+        return false;
+    }
     loading.value = true;
     pageError.value = '';
     try {
@@ -118,7 +130,14 @@ async function loadPeriods() {
 }
 
 async function refresh() {
-    await Promise.all([loadTypes(), loadPeriods()]);
+    ++loadVersion;
+    if (await loadTypes()) {
+        await loadPeriods();
+    } else {
+        periods.value = [];
+        totalRecords.value = 0;
+        loading.value = false;
+    }
 }
 
 async function changeFilter() {
@@ -247,8 +266,8 @@ onMounted(refresh);
         <div class="period-filter">
             <label for="period-filter">Тип периода</label>
             <Select input-id="period-filter" v-model="selectedType" :options="types"
-                    option-label="nameTypePeriod" option-value="id" placeholder="Все типы"
-                    filter show-clear :loading="typesLoading" :disabled="busy || typesLoading || !!typesError"
+                    option-label="nameTypePeriod" option-value="id" placeholder="Выберите тип периода"
+                    filter :loading="typesLoading" :disabled="busy || typesLoading || !!typesError"
                     empty-filter-message="Типы не найдены" @change="changeFilter" />
         </div>
         <DataTable :value="periods" :loading="loading" data-key="id" striped-rows show-gridlines
@@ -256,8 +275,7 @@ onMounted(refresh);
                    :rows-per-page-options="PAGE_SIZE_OPTIONS" @page="changePage"
                    paginator-template="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink RowsPerPageDropdown CurrentPageReport"
                    current-page-report-template="{first}–{last} из {totalRecords}" :table-style="{ minWidth: '58rem' }">
-            <template #empty>{{ pageError ? 'Не удалось загрузить периоды. Нажмите «Обновить».' : selectedType ? 'Для выбранного типа периоды пока не добавлены.' : 'Периоды пока не добавлены.' }}</template>
-            <Column header="Тип периода"><template #body="{ data }"><Tag :value="data.typePeriod.nameTypePeriod" severity="secondary" /></template></Column>
+            <template #empty>{{ pageError ? 'Не удалось загрузить периоды. Нажмите «Обновить».' : typesError ? 'Не удалось загрузить типы периодов. Нажмите «Обновить».' : selectedType ? 'Для выбранного типа периоды пока не добавлены.' : 'Сначала добавьте тип периода.' }}</template>
             <Column field="codePeriod" header="Код" />
             <Column field="namePeriod" header="Наименование" />
             <Column header="Дата начала"><template #body="{ data }">{{ displayDate(data.dateBegin) }}</template></Column>
