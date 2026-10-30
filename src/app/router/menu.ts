@@ -18,6 +18,7 @@ export const APP_MENU: MenuItem[] = [
                 icon: 'pi pi-list',
                 items: [
                     { label: 'Тип предприятия', route: '/type-enterprises' },
+                    { label: 'Предприятия', route: '/enterprises' },
                 ],
             },
             {

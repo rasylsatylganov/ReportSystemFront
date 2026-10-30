@@ -3,6 +3,7 @@ import HomePage from '@/app/pages/HomePage.vue';
 import DrTypePeriodPage from '@/app/pages/DrTypePeriodPage.vue';
 import DrPeriodPage from '@/app/pages/DrPeriodPage.vue';
 import DrTypeEnterprisePage from '@/app/pages/DrTypeEnterprisePage.vue';
+import DrEnterprisePage from '@/app/pages/DrEnterprisePage.vue';
 import DrReferencePage from '@/app/pages/DrReferencePage.vue';
 
 // Здесь URL связывается с компонентом страницы.
@@ -29,6 +30,11 @@ const router = createRouter({
             path: '/type-enterprises',
             name: 'type-enterprises',
             component: DrTypeEnterprisePage,
+        },
+        {
+            path: '/enterprises',
+            name: 'enterprises',
+            component: DrEnterprisePage,
         },
         {
             path: '/references',
