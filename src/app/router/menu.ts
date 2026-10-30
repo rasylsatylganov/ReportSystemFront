@@ -6,6 +6,7 @@ export const APP_MENU: MenuItem[] = [
         icon: 'pi pi-book',
         items: [
             { label: 'Типы периодов', route: '/type-periods' },
+            { label: 'Типы предприятий', route: '/type-enterprises' },
         ],
     },
 ];
