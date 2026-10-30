@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import HomePage from '@/app/pages/HomePage.vue';
 import DrTypePeriodPage from '@/app/pages/DrTypePeriodPage.vue';
+import DrPeriodPage from '@/app/pages/DrPeriodPage.vue';
 import DrTypeEnterprisePage from '@/app/pages/DrTypeEnterprisePage.vue';
 import DrReferencePage from '@/app/pages/DrReferencePage.vue';
 
@@ -18,6 +19,11 @@ const router = createRouter({
             path: '/type-periods',
             name: 'type-periods',
             component: DrTypePeriodPage,
+        },
+        {
+            path: '/periods',
+            name: 'periods',
+            component: DrPeriodPage,
         },
         {
             path: '/type-enterprises',

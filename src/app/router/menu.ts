@@ -10,6 +10,7 @@ export const APP_MENU: MenuItem[] = [
                 icon: 'pi pi-list',
                 items: [
                     { label: 'Тип периода', route: '/type-periods' },
+                    { label: 'Периоды', route: '/periods' },
                 ],
             },
             {
