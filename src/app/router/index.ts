@@ -1,5 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import HomePage from '@/app/pages/HomePage.vue';
+import IncomingReportsPage from '@/app/pages/IncomingReportsPage.vue';
+import ReportDesignerPage from '@/app/pages/ReportDesignerPage.vue';
 import DrTypePeriodPage from '@/app/pages/DrTypePeriodPage.vue';
 import DrPeriodPage from '@/app/pages/DrPeriodPage.vue';
 import DrTypeEnterprisePage from '@/app/pages/DrTypeEnterprisePage.vue';
@@ -46,6 +48,21 @@ const router = createRouter({
             path: '/reference-items',
             name: 'reference-items',
             component: DrReferenceItemPage,
+        },
+        {
+            path: '/incoming-reports',
+            name: 'incoming-reports',
+            component: IncomingReportsPage,
+        },
+        {
+            path: '/incoming-reports/new',
+            name: 'incoming-report-new',
+            component: ReportDesignerPage,
+        },
+        {
+            path: '/incoming-reports/:id',
+            name: 'incoming-report-designer',
+            component: ReportDesignerPage,
         },
         {
             path: '/:pathMatch(.*)*',

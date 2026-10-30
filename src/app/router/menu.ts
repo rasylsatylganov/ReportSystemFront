@@ -1,6 +1,7 @@
 import type { MenuItem } from 'primevue/menuitem';
 
 export const APP_MENU: MenuItem[] = [
+    { label: 'Входящие отчёты', icon: 'pi pi-table', route: '/incoming-reports' },
     {
         label: 'Справочники',
         icon: 'pi pi-book',
