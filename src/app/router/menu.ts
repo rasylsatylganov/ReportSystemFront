@@ -7,6 +7,13 @@ export const APP_MENU: MenuItem[] = [
         items: [
             { label: 'Типы периодов', route: '/type-periods' },
             { label: 'Типы предприятий', route: '/type-enterprises' },
+            {
+                label: 'Справочники',
+                icon: 'pi pi-list',
+                items: [
+                    { label: 'Справочники', route: '/references' },
+                ],
+            },
         ],
     },
 ];
