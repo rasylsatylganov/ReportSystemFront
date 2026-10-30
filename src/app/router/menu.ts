@@ -5,8 +5,20 @@ export const APP_MENU: MenuItem[] = [
         label: 'Справочники',
         icon: 'pi pi-book',
         items: [
-            { label: 'Типы периодов', route: '/type-periods' },
-            { label: 'Типы предприятий', route: '/type-enterprises' },
+            {
+                label: 'Периоды',
+                icon: 'pi pi-list',
+                items: [
+                    { label: 'Тип периода', route: '/type-periods' },
+                ],
+            },
+            {
+                label: 'Предприятия',
+                icon: 'pi pi-list',
+                items: [
+                    { label: 'Тип предприятия', route: '/type-enterprises' },
+                ],
+            },
             {
                 label: 'Справочники',
                 icon: 'pi pi-list',
