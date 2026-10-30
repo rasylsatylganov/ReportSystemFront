@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { onMounted, ref } from 'vue';
 import Button from 'primevue/button';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
+import type { DataTablePageEvent } from 'primevue/datatable';
 import Dialog from 'primevue/dialog';
 import InputText from 'primevue/inputtext';
 import Message from 'primevue/message';
 import type { DrTypePeriod, DrTypePeriodRequest } from '@/core/models/dr-type-period.model';
+import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS } from '@/core/models/page.model';
 import { drTypePeriodService } from '@/core/services/dr-type-period.service';
 
 // Состояние страницы. ref автоматически обновляет разметку при изменении .value.
@@ -15,12 +17,9 @@ const loading = ref(false);
 const pageError = ref('');
 const movingId = ref<number | null>(null);
 const first = ref(0);
-const pageSize = ref(10);
-
-// Порядок всегда определяется SORT_INDEX. ID используется для стабильности при равных индексах.
-const orderedPeriods = computed(() => [...periods.value].sort(
-    (a, b) => a.sortIndex - b.sortIndex || a.id - b.id
-));
+const pageSize = ref(DEFAULT_PAGE_SIZE);
+const totalRecords = ref(0);
+let loadVersion = 0;
 
 const successMessage = ref('');
 
@@ -44,24 +43,40 @@ function errorMessage(error: unknown): string {
 }
 
 async function loadPeriods() {
-    if (loading.value) return false;
+    const version = ++loadVersion;
     loading.value = true;
     pageError.value = '';
     try {
-        const result = await drTypePeriodService.getAll();
-        if (!Array.isArray(result)) throw new Error('Ожидался список типов периодов от backend.');
-        periods.value = result;
-        if (first.value >= result.length) {
-            first.value = Math.max(0, Math.ceil(result.length / pageSize.value) - 1) * pageSize.value;
+        let requestedPage = Math.floor(first.value / pageSize.value);
+        let result = await drTypePeriodService.findPage(requestedPage, pageSize.value);
+        if (version !== loadVersion) return false;
+        // После удаления последней строки страницы возвращаемся на существующую страницу.
+        while (requestedPage > 0 && requestedPage >= result.totalPages) {
+            requestedPage = Math.max(0, result.totalPages - 1);
+            result = await drTypePeriodService.findPage(requestedPage, pageSize.value);
+            if (version !== loadVersion) return false;
         }
+        if (!Array.isArray(result.content)) throw new Error('Ожидалась страница типов периодов от backend.');
+        periods.value = result.content;
+        totalRecords.value = result.totalElements;
+        first.value = result.page * result.size;
         return true;
     } catch (error) {
+        if (version !== loadVersion) return false;
         // Ошибку показываем отдельно: она не должна выглядеть как пустой справочник.
         pageError.value = errorMessage(error);
+        periods.value = [];
         return false;
     } finally {
-        loading.value = false;
+        if (version === loadVersion) loading.value = false;
     }
+}
+
+async function changePage(event: DataTablePageEvent) {
+    if (saving.value || deleting.value || movingId.value !== null) return;
+    first.value = event.first;
+    pageSize.value = event.rows;
+    await loadPeriods();
 }
 
 function openCreate() {
@@ -149,17 +164,19 @@ async function movePeriod(period: DrTypePeriod, direction: 'up' | 'down') {
     movingId.value = period.id;
     pageError.value = '';
     successMessage.value = '';
+    const currentIndex = first.value + periods.value.findIndex(item => item.id === period.id);
     try {
         if (direction === 'up') {
             await drTypePeriodService.moveUp(period.id);
         } else {
             await drTypePeriodService.moveDown(period.id);
         }
+        // Перестановка через границу страницы должна оставить перемещённую запись на экране.
+        const targetIndex = Math.max(0, Math.min(totalRecords.value - 1,
+            currentIndex + (direction === 'up' ? -1 : 1)));
+        first.value = Math.floor(targetIndex / pageSize.value) * pageSize.value;
         const loaded = await loadPeriods();
         if (loaded) {
-            // При переходе через границу страниц показываем страницу перемещённой записи.
-            const index = orderedPeriods.value.findIndex(item => item.id === period.id);
-            if (index >= 0) first.value = Math.floor(index / pageSize.value) * pageSize.value;
             successMessage.value = 'Порядок изменён.';
         }
     } catch (error) {
@@ -188,8 +205,12 @@ onMounted(loadPeriods);
         <Message v-if="successMessage" severity="success" :closable="false">{{ successMessage }}</Message>
         <Message v-if="pageError" severity="error" :closable="false">{{ pageError }}</Message>
 
-        <DataTable :value="orderedPeriods" :loading="loading" data-key="id" striped-rows show-gridlines
-                   paginator v-model:first="first" v-model:rows="pageSize" :rows-per-page-options="[10, 25, 50]" :table-style="{ minWidth: '42rem' }">
+        <DataTable :value="periods" :loading="loading" data-key="id" striped-rows show-gridlines
+                   lazy paginator :first="first" :rows="pageSize" :total-records="totalRecords"
+                   :rows-per-page-options="PAGE_SIZE_OPTIONS" @page="changePage"
+                   paginator-template="FirstPageLink PrevPageLink PageLinks NextPageLink LastPageLink RowsPerPageDropdown CurrentPageReport"
+                   current-page-report-template="{first}–{last} из {totalRecords}"
+                   :table-style="{ minWidth: '42rem' }">
             <template #empty>
                 {{ pageError ? 'Не удалось обновить данные. Нажмите «Обновить» после устранения ошибки.' : 'Типы периодов пока не добавлены.' }}
             </template>
@@ -213,11 +234,11 @@ onMounted(loadPeriods);
                     <div class="period-order-actions">
                         <Button icon="pi pi-arrow-up" text severity="secondary"
                                 :aria-label="`Сдвинуть вверх ${data.codeTypePeriod}`" title="Сдвинуть вверх"
-                                :disabled="loading || saving || deleting || movingId !== null || orderedPeriods[0]?.id === data.id"
+                                :disabled="loading || saving || deleting || movingId !== null || (first === 0 && periods[0]?.id === data.id)"
                                 @click="movePeriod(data, 'up')" />
                         <Button icon="pi pi-arrow-down" text severity="secondary"
                                 :aria-label="`Сдвинуть вниз ${data.codeTypePeriod}`" title="Сдвинуть вниз"
-                                :disabled="loading || saving || deleting || movingId !== null || orderedPeriods[orderedPeriods.length - 1]?.id === data.id"
+                                :disabled="loading || saving || deleting || movingId !== null || (first + periods.length >= totalRecords && periods[periods.length - 1]?.id === data.id)"
                                 @click="movePeriod(data, 'down')" />
                     </div>
                 </template>

@@ -1,12 +1,14 @@
 import type { DrTypePeriod, DrTypePeriodRequest } from '@/core/models/dr-type-period.model';
+import { DEFAULT_PAGE_SIZE, type PageResult } from '@/core/models/page.model';
 import { http } from './http';
 
 // Браузер обращается к Vite, а Vite пересылает /api на Java backend.
 const URL = '/api/dr-type-periods';
 
 export const drTypePeriodService = {
-    getAll(): Promise<DrTypePeriod[]> {
-        return http<DrTypePeriod[]>(URL);
+    findPage(page = 0, size = DEFAULT_PAGE_SIZE): Promise<PageResult<DrTypePeriod>> {
+        const query = new URLSearchParams({ page: String(page), size: String(size) });
+        return http<PageResult<DrTypePeriod>>(`${URL}?${query}`);
     },
 
     getById(id: number): Promise<DrTypePeriod> {
