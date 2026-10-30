@@ -196,6 +196,18 @@ onMounted(loadPeriods);
             <Column field="id" header="ID" style="width: 6rem" />
             <Column field="codeTypePeriod" header="Код" style="width: 10rem" />
             <Column field="nameTypePeriod" header="Наименование" />
+            <Column header="Действия" style="width: 9rem">
+                <template #body="{ data }">
+                    <div class="period-actions">
+                        <Button icon="pi pi-pencil" severity="secondary" text
+                                :aria-label="`Редактировать ${data.codeTypePeriod}`" title="Редактировать"
+                                :disabled="loading || saving || deleting || movingId !== null" @click="openEdit(data)" />
+                        <Button icon="pi pi-trash" severity="danger" text
+                                :aria-label="`Удалить ${data.codeTypePeriod}`" title="Удалить"
+                                :disabled="loading || saving || deleting || movingId !== null" @click="openDelete(data)" />
+                    </div>
+                </template>
+            </Column>
             <Column header="Порядок" style="width: 6rem">
                 <template #body="{ data }">
                     <div class="period-order-actions">
@@ -207,18 +219,6 @@ onMounted(loadPeriods);
                                 :aria-label="`Сдвинуть вниз ${data.codeTypePeriod}`" title="Сдвинуть вниз"
                                 :disabled="loading || saving || deleting || movingId !== null || orderedPeriods[orderedPeriods.length - 1]?.id === data.id"
                                 @click="movePeriod(data, 'down')" />
-                    </div>
-                </template>
-            </Column>
-            <Column header="Действия" style="width: 9rem">
-                <template #body="{ data }">
-                    <div class="period-actions">
-                        <Button icon="pi pi-pencil" severity="secondary" text
-                                :aria-label="`Редактировать ${data.codeTypePeriod}`" title="Редактировать"
-                                :disabled="loading || saving || deleting || movingId !== null" @click="openEdit(data)" />
-                        <Button icon="pi pi-trash" severity="danger" text
-                                :aria-label="`Удалить ${data.codeTypePeriod}`" title="Удалить"
-                                :disabled="loading || saving || deleting || movingId !== null" @click="openDelete(data)" />
                     </div>
                 </template>
             </Column>
