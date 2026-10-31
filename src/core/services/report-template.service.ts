@@ -4,8 +4,12 @@ import { http } from './http';
 
 const URL = '/api/incoming-report-templates';
 export const reportTemplateService = {
-    list(page = 0, size = 20): Promise<PageResult<IncomingReport>> {
-        return http(`${URL}?${new URLSearchParams({ page: String(page), size: String(size) })}`);
+    list(page = 0, size = 20, typePeriodId: number | null = null,
+         typeEnterpriseId: number | null = null): Promise<PageResult<IncomingReport>> {
+        const query = new URLSearchParams({ page: String(page), size: String(size) });
+        if (typePeriodId !== null) query.set('typePeriodId', String(typePeriodId));
+        if (typeEnterpriseId !== null) query.set('typeEnterpriseId', String(typeEnterpriseId));
+        return http(`${URL}?${query}`);
     },
     get(id: number): Promise<ReportTemplate> { return http(`${URL}/${id}`); },
     lookups(): Promise<DesignerLookups> { return http(`${URL}/lookups`); },
