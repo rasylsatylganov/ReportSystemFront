@@ -50,6 +50,7 @@ const selectedReference = computed(() => selected.value?.kind === 'reference'
 const selectedField = computed(() => selected.value?.kind === 'field'
     ? fields.value.find(field => field.key === selected.value?.key) : undefined);
 const selectedParent = computed(() => references.value.find(ref => ref.key === selectedField.value?.parentKey));
+const activeReference = computed(() => selectedReference.value ?? selectedParent.value);
 const disabled = computed(() => loading.value || saving.value || checking.value || !ready.value);
 const signature = computed(() => JSON.stringify({ header: header.value, references: references.value, fields: fields.value }));
 const cleanSignature = ref('');
@@ -75,6 +76,8 @@ function order<T extends { orderSort: number | null; key: number }>(items: T[]) 
     return [...items].sort((a, b) => (a.orderSort ?? Number.MAX_SAFE_INTEGER) - (b.orderSort ?? Number.MAX_SAFE_INTEGER) || a.key - b.key);
 }
 const orderedReferences = computed(() => order(references.value));
+const verticalReferences = computed(() => orderedReferences.value.filter(ref => !horizontal(ref)));
+const horizontalReferences = computed(() => orderedReferences.value.filter(horizontal));
 function childFields(ref: EditorReference) { return order(fields.value.filter(field => field.parentKey === ref.key)); }
 function availableReferences(ref: EditorReference) {
     return dictionaries.value.filter(item => item.id === ref.referenceId || !references.value.some(other => other.key !== ref.key && other.referenceId === item.id));
@@ -187,18 +190,22 @@ function removeSelected() {
     if (selected.value.kind === 'reference') {
         fields.value = fields.value.filter(field => field.parentKey !== selected.value!.key);
         references.value = references.value.filter(ref => ref.key !== selected.value!.key);
-    } else fields.value = fields.value.filter(field => field.key !== selected.value!.key);
-    selected.value = null;
+        selected.value = null;
+    } else {
+        const parent = selectedParent.value;
+        fields.value = fields.value.filter(field => field.key !== selected.value!.key);
+        selected.value = parent ? { kind: 'reference', key: parent.key } : null;
+    }
     success.value = '';
 }
 function reorder(direction: -1 | 1) {
     const node = selectedField.value ?? selectedReference.value;
     if (!node) return;
-    const siblings = selectedField.value ? childFields(selectedParent.value!) : orderedReferences.value;
+    const siblings = selectedField.value ? childFields(selectedParent.value!) :
+        selectedReference.value && horizontal(selectedReference.value) ? horizontalReferences.value : verticalReferences.value;
     const index = siblings.findIndex(item => item.key === node.key);
     const neighbor = siblings[index + direction];
     if (!neighbor) return;
-    // Меняется только порядок отображения, координаты Excel остаются прежними.
     siblings.forEach((item, itemIndex) => { item.orderSort = itemIndex + 1; });
     const previous = node.orderSort;
     node.orderSort = neighbor.orderSort;
@@ -319,20 +326,41 @@ onBeforeUnmount(() => { ++loadVersion; window.removeEventListener('beforeunload'
             <div class="designer-columns">
                 <section class="panel structure"><h2>Структура отчёта</h2>
                     <p class="muted">Выберите элемент, чтобы настроить его справа.</p>
-                    <div v-if="!references.length" class="empty-structure">Добавьте первый справочник.</div>
-                    <div v-for="ref in orderedReferences" :key="ref.key" class="structure-group">
-                        <button type="button" class="structure-node" :class="{ active: selected?.key === ref.key }" :disabled="disabled" @click="select('reference', ref.key)">
-                            <span><i :class="horizontal(ref) ? 'pi pi-arrows-h' : 'pi pi-arrows-v'"></i> {{ refName(ref) }}</span>
-                            <small>{{ horizontal(ref) ? `Строка ${ref.indexNum ?? '—'}` : `${columnName(ref.indexNum)} · ${ref.indexNum ?? '—'}` }}</small>
-                        </button>
-                        <div v-for="field in childFields(ref)" :key="field.key" class="child-node">
-                            <button type="button" class="structure-node" :class="{ active: selected?.key === field.key }" :disabled="disabled" @click="select('field', field.key)">
-                                <span>{{ fieldName(field) }}<b v-if="field.required" title="Обязательное поле"> *</b></span><small>{{ columnName(field.column) }} · {{ field.column ?? '—' }}</small>
+                    <section class="structure-section" aria-labelledby="report-references-title">
+                        <h3 id="report-references-title">Вертикальные сгруппированные справочники</h3>
+                        <Button label="Добавить справочник" icon="pi pi-plus" outlined :disabled="disabled" @click="addReference" />
+                        <p v-if="!verticalReferences.length" class="muted">Вертикальные справочники пока не добавлены.</p>
+                        <div class="structure-list">
+                            <button v-for="ref in verticalReferences" :key="ref.key" type="button" class="structure-node"
+                                :class="{ active: activeReference?.key === ref.key }" :aria-pressed="activeReference?.key === ref.key"
+                                :disabled="disabled" @click="select('reference', ref.key)">
+                                <span><i class="pi pi-arrows-v"></i> {{ refName(ref) }}</span>
+                                <small>{{ columnName(ref.indexNum) }} · {{ ref.indexNum ?? '—' }}</small>
                             </button>
                         </div>
-                        <Button v-if="horizontal(ref)" label="Добавить поле" icon="pi pi-plus" text size="small" :disabled="disabled || !ref.referenceId || itemLoading > 0" @click="addField(ref)" />
-                    </div>
-                    <Button label="Добавить справочник" icon="pi pi-plus" outlined :disabled="disabled" @click="addReference" />
+                    </section>
+                    <section class="structure-section" aria-labelledby="report-fields-title">
+                        <h3 id="report-fields-title">Горизонтальные значение справочников</h3>
+                        <p v-if="!horizontalReferences.length" class="muted">Горизонтальные справочники пока не добавлены.</p>
+                        <div v-for="ref in horizontalReferences" :key="ref.key" class="structure-list">
+                            <button type="button" class="structure-node"
+                                :class="{ active: activeReference?.key === ref.key }" :aria-pressed="activeReference?.key === ref.key"
+                                :disabled="disabled" @click="select('reference', ref.key)">
+                                <span><i class="pi pi-arrows-h"></i> {{ refName(ref) }}</span>
+                                <small>Строка {{ ref.indexNum ?? '—' }}</small>
+                            </button>
+                            <Button label="Добавить поле" icon="pi pi-plus" outlined
+                                :disabled="disabled || !ref.referenceId || itemLoading > 0" @click="addField(ref)" />
+                            <p v-if="!childFields(ref).length" class="muted">В этом справочнике пока нет полей.</p>
+                            <button v-for="field in childFields(ref)" :key="field.key" type="button" class="structure-node"
+                                :class="{ active: selected?.kind === 'field' && selected.key === field.key }"
+                                :aria-pressed="selected?.kind === 'field' && selected.key === field.key"
+                                :disabled="disabled" @click="select('field', field.key)">
+                                <span>{{ fieldName(field) }}<b v-if="field.required" title="Обязательное поле"> *</b></span>
+                                <small>{{ columnName(field.column) }} · {{ field.column ?? '—' }}</small>
+                            </button>
+                        </div>
+                    </section>
                 </section>
                 <section class="panel properties"><h2>{{ selectedField ? 'Настройки поля' : selectedReference ? 'Настройки справочника' : 'Настройки элемента' }}</h2>
                     <p v-if="!selected" class="muted">Выберите справочник или поле в структуре либо в предпросмотре.</p>
@@ -357,7 +385,8 @@ onBeforeUnmount(() => { ++loadVersion; window.removeEventListener('beforeunload'
                         <small class="muted">Признак будет использоваться при импорте для проверки обязательных данных.</small>
                     </template>
                     <template v-if="selected"><div class="order-actions"><Button label="Выше" icon="pi pi-arrow-up" severity="secondary" :disabled="disabled" @click="reorder(-1)" /><Button label="Ниже" icon="pi pi-arrow-down" severity="secondary" :disabled="disabled" @click="reorder(1)" /></div>
-                        <small class="muted">Меняется порядок отображения. Координаты Excel остаются прежними.</small>
+                        <small v-if="selectedReference && !horizontal(selectedReference)" class="muted">Выше — влево, ниже — вправо. Меняется только порядок отображения.</small>
+                        <small v-else class="muted">Меняется только порядок отображения.</small>
                         <Button label="Удалить элемент" icon="pi pi-trash" severity="danger" text :disabled="disabled" @click="removeSelected" />
                     </template>
                 </section>
@@ -389,14 +418,14 @@ h2 { margin: 0 0 18px; font-size: 17px; }
 .structure, .properties { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .structure h2, .properties h2 { margin-bottom: 0; }
 .structure .muted { margin: 0; }
-.structure-group { display: flex; flex-direction: column; gap: 7px; }
+.structure-section { display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 12px; border: 1px solid var(--app-border); border-radius: 6px; background: var(--app-panel); }
+.structure-section h3 { margin: 0; font-size: 14px; }
+.structure-list { display: flex; flex-direction: column; gap: 7px; }
 .structure-node { width: 100%; background: var(--p-content-background); border: 1px solid var(--app-border); color: var(--app-text); border-radius: 5px; padding: 11px; display: flex; align-items: center; justify-content: space-between; gap: 9px; text-align: left; cursor: pointer; }
 .structure-node.active { background: var(--p-blue-50); border-color: var(--p-blue-500); color: var(--p-blue-700); }
 .structure-node small { white-space: nowrap; background: var(--app-panel); padding: 4px 6px; border-radius: 12px; font-size: 11px; }
 .structure-node i { margin-right: 5px; font-size: 12px; }
 .structure-node:focus-visible { outline: 2px solid var(--p-blue-600); }
-.child-node { margin-left: 15px; }
-.empty-structure { padding: 25px 0; color: var(--p-text-muted-color); }
 .preview { min-width: 0; }
 .parent-label { font-weight: 600; color: var(--app-brand); margin: 0; }
 .checkbox-control { display: flex; align-items: center; gap: 10px; }

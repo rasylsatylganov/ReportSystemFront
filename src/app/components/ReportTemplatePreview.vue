@@ -20,23 +20,23 @@ function columnName(value: number): string {
     while (value > 0) { value--; name = String.fromCharCode(65 + value % 26) + name; value = Math.floor(value / 26); }
     return name;
 }
-const vertical = computed(() => props.references.filter(ref => !horizontal(ref) && ref.indexNum)
-    .sort((a, b) => a.indexNum! - b.indexNum!));
-const horizontalRefs = computed(() => props.references.filter(horizontal));
+function displayOrder<T extends { orderSort: number | null; key: number }>(items: T[]) {
+    return [...items].sort((first, second) =>
+        (first.orderSort ?? Number.MAX_SAFE_INTEGER) - (second.orderSort ?? Number.MAX_SAFE_INTEGER) || first.key - second.key);
+}
+const vertical = computed(() => displayOrder(props.references.filter(ref => !horizontal(ref))));
+const horizontalRefs = computed(() => displayOrder(props.references.filter(horizontal)));
+const orderedFields = computed(() => horizontalRefs.value.flatMap(ref =>
+    displayOrder(props.fields.filter(field => field.parentKey === ref.key))));
 const headerRows = computed(() => [...new Set(horizontalRefs.value.map(ref => ref.indexNum)
     .filter((row): row is number => !!row))].sort((a, b) => a - b));
-const columns = computed(() => {
-    const used = [...vertical.value.map(ref => ref.indexNum!), ...props.fields.map(field => field.column ?? 0)]
-        .filter(column => column >= 1 && column <= 16384);
-    const max = Math.max(5, ...used);
-    if (max <= 16) return Array.from({ length: max }, (_, index) => index + 1);
-    return [...new Set([...Array.from({ length: 5 }, (_, index) => index + 1), ...used])].sort((a, b) => a - b);
-});
+const columns = computed(() => Array.from({ length: Math.max(5, vertical.value.length + orderedFields.value.length) },
+    (_, index) => index + 1));
 const firstDataRow = computed(() => Math.max(props.begin ?? 1, (headerRows.value.at(-1) ?? 1) + 1));
 const dataRows = computed(() => Array.from({ length: Math.max(0, Math.min(6, (props.end ?? firstDataRow.value + 5) - firstDataRow.value + 1)) },
     (_, index) => firstDataRow.value + index));
-function dimension(column: number) { return vertical.value.find(ref => ref.indexNum === column); }
-function field(column: number) { return props.fields.find(item => item.column === column); }
+function dimension(column: number) { return vertical.value[column - 1]; }
+function field(column: number) { return column > vertical.value.length ? orderedFields.value[column - vertical.value.length - 1] : undefined; }
 function referenceName(ref: EditorReference) {
     return props.dictionaries.find(item => item.id === ref.referenceId)?.nameReference ?? 'Справочник';
 }
@@ -106,7 +106,7 @@ function typeLabel(column: number) {
                 </tbody>
             </table>
         </div>
-        <p class="preview-footer">Координаты соответствуют Excel. Показаны до 6 строк примера; диапазон импорта задаётся отдельно.</p>
+        <p class="preview-footer">Столбцы расположены по порядку отображения. Номера столбцов Excel на макет не влияют. Показаны до 6 строк примера.</p>
     </section>
 </template>
 
