@@ -160,7 +160,7 @@ onBeforeUnmount(() => { ++version; });
             <Column field="nameReportIn" header="Наименование" />
             <Column field="typePeriod.nameTypePeriod" header="Тип периода" />
             <Column field="typeEnterprise.nameTypeEnterprise" header="Тип предприятия" />
-            <Column header="Строки Excel"><template #body="{ data }">{{ data.indexRowScanBegin }}–{{ data.indexRowScanEnd }}</template></Column>
+
             <Column header="Действия"><template #body="{ data }"><div class="actions">
                 <Button label="Открыть" icon="pi pi-pencil" text :disabled="deleting" @click="router.push(`/incoming-reports/${data.id}`)" />
                 <Button icon="pi pi-trash" text severity="danger" :aria-label="`Удалить ${data.nameReportIn}`" :disabled="deleting"

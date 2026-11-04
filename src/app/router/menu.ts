@@ -31,5 +31,11 @@ export const APP_MENU: MenuItem[] = [
             },
         ],
     },
-    { label: 'Входящие отчёты', icon: 'pi pi-table', route: '/incoming-reports' },
+    {
+        label: 'Мета данные',
+        icon: 'pi pi-table',
+        items: [
+            { label: 'Входящие отчёты', route: '/incoming-reports' },
+        ],
+    },
 ];

@@ -293,7 +293,7 @@ onBeforeUnmount(() => { ++loadVersion; window.removeEventListener('beforeunload'
             <div><RouterLink to="/incoming-reports" class="back-link">← Входящие отчёты</RouterLink>
                 <h1>Конструктор входящего отчёта</h1><span class="save-state">{{ dirty ? 'Есть несохранённые изменения' : currentId ? 'Структура сохранена' : 'Новый отчёт' }}</span></div>
             <div class="actions">
-                <Button label="Перечитать" icon="pi pi-refresh" severity="secondary" :disabled="saving || checking" :loading="loading" @click="reload" />
+                <Button label="Обновить" icon="pi pi-refresh" severity="secondary" :disabled="saving || checking" :loading="loading" @click="reload" />
                 <Button label="Проверить структуру" icon="pi pi-check-circle" severity="secondary" :loading="checking" :disabled="disabled || itemLoading > 0" @click="check" />
                 <Button label="Сохранить" icon="pi pi-save" :loading="saving" :disabled="disabled || itemLoading > 0" @click="save" />
             </div>
@@ -307,8 +307,8 @@ onBeforeUnmount(() => { ++loadVersion; window.removeEventListener('beforeunload'
                 <div class="parameter-grid">
                     <div class="control"><label for="report-code">Код *</label><InputText id="report-code" v-model="header.code" :maxlength="50" :disabled="disabled" /></div>
                     <div class="control name-control"><label for="report-name">Наименование *</label><InputText id="report-name" v-model="header.name" :maxlength="300" :disabled="disabled" /></div>
-                    <div class="control"><label for="report-period">Тип периода *</label><Select input-id="report-period" v-model="header.typePeriodId" :options="periodTypes" option-label="nameTypePeriod" option-value="id" placeholder="Выберите тип" :disabled="disabled" /></div>
-                    <div class="control"><label for="report-enterprise">Тип предприятия *</label><Select input-id="report-enterprise" v-model="header.typeEnterpriseId" :options="enterpriseTypes" option-label="nameTypeEnterprise" option-value="id" placeholder="Выберите тип" :disabled="disabled" /></div>
+                    <div class="control"><label for="report-period">Тип периода *</label><Select input-id="report-period" v-model="header.typePeriodId" :options="periodTypes" option-label="nameTypePeriod" option-value="id" placeholder="Выберите тип" :disabled="disabled || currentId !== null" /></div>
+                    <div class="control"><label for="report-enterprise">Тип предприятия *</label><Select input-id="report-enterprise" v-model="header.typeEnterpriseId" :options="enterpriseTypes" option-label="nameTypeEnterprise" option-value="id" placeholder="Выберите тип" :disabled="disabled || currentId !== null" /></div>
                 </div>
                 <div class="scan-range"><span>Просмотр строк Excel:</span>
                     <label for="report-begin">с</label><InputNumber input-id="report-begin" v-model="header.begin" :min="1" :max="1048576" :use-grouping="false" :disabled="disabled" />
@@ -334,9 +334,6 @@ onBeforeUnmount(() => { ++loadVersion; window.removeEventListener('beforeunload'
                     </div>
                     <Button label="Добавить справочник" icon="pi pi-plus" outlined :disabled="disabled" @click="addReference" />
                 </section>
-                <div class="panel preview"><ReportTemplatePreview :name="header.name" :begin="header.begin" :end="header.end"
-                    :references="references" :fields="fields" :dictionaries="dictionaries" :items="dictionaryItems"
-                    :positions="lookups.positions" :field-types="lookups.fieldTypes" :selected-key="selected?.key ?? null" @select="select" /></div>
                 <section class="panel properties"><h2>{{ selectedField ? 'Настройки поля' : selectedReference ? 'Настройки справочника' : 'Настройки элемента' }}</h2>
                     <p v-if="!selected" class="muted">Выберите справочник или поле в структуре либо в предпросмотре.</p>
                     <template v-if="selectedReference">
@@ -364,6 +361,9 @@ onBeforeUnmount(() => { ++loadVersion; window.removeEventListener('beforeunload'
                         <Button label="Удалить элемент" icon="pi pi-trash" severity="danger" text :disabled="disabled" @click="removeSelected" />
                     </template>
                 </section>
+                <div class="panel preview"><ReportTemplatePreview :name="header.name" :begin="header.begin" :end="header.end"
+                    :references="references" :fields="fields" :dictionaries="dictionaries" :items="dictionaryItems"
+                    :positions="lookups.positions" :field-types="lookups.fieldTypes" :selected-key="selected?.key ?? null" @select="select" /></div>
             </div>
         </template>
     </div>
@@ -385,7 +385,7 @@ h2 { margin: 0 0 18px; font-size: 17px; }
 .scan-range :deep(.p-inputnumber) { width: 115px; }
 .scan-range :deep(input) { width: 100%; }
 .scan-range small { color: var(--p-text-muted-color); }
-.designer-columns { display: grid; grid-template-columns: minmax(210px, .85fr) minmax(350px, 2fr) minmax(245px, 1fr); gap: 16px; align-items: start; }
+.designer-columns { display: grid; grid-template-columns: minmax(210px, .85fr) minmax(245px, 1fr) minmax(350px, 2fr); gap: 16px; align-items: start; }
 .structure, .properties { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .structure h2, .properties h2 { margin-bottom: 0; }
 .structure .muted { margin: 0; }
@@ -402,6 +402,6 @@ h2 { margin: 0 0 18px; font-size: 17px; }
 .checkbox-control { display: flex; align-items: center; gap: 10px; }
 .properties :deep(.p-inputnumber), .properties :deep(input) { width: 100%; }
 ul { margin: 0; padding-left: 18px; }
-@media (max-width: 1200px) { .designer-columns { grid-template-columns: 230px minmax(0, 1fr); } .properties { grid-column: 1 / -1; } }
-@media (max-width: 760px) { .designer-columns, .parameter-grid { grid-template-columns: minmax(0, 1fr); } .properties { grid-column: auto; } .panel { padding: 16px; } h1 { font-size: 21px; } }
+@media (max-width: 1200px) { .designer-columns { grid-template-columns: 230px minmax(0, 1fr); } .preview { grid-column: 1 / -1; } }
+@media (max-width: 760px) { .designer-columns, .parameter-grid { grid-template-columns: minmax(0, 1fr); } .preview { grid-column: auto; } .panel { padding: 16px; } h1 { font-size: 21px; } }
 </style>
