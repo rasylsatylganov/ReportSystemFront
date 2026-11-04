@@ -116,6 +116,14 @@ async function remove() {
         deleteError.value = cause instanceof Error ? cause.message : 'Не удалось удалить отчёт.';
     } finally { deleting.value = false; }
 }
+function createReport() {
+    if (deleting.value || filtersLoading.value || filtersError.value ||
+        selectedPeriodType.value === null || selectedEnterpriseType.value === null) return;
+    void router.push({
+        path: '/incoming-reports/new',
+        query: { typePeriodId: String(selectedPeriodType.value), typeEnterpriseId: String(selectedEnterpriseType.value) },
+    });
+}
 onMounted(refresh);
 onBeforeUnmount(() => { ++version; });
 </script>
@@ -126,7 +134,7 @@ onBeforeUnmount(() => { ++version; });
             <div><h1>Входящие отчёты</h1><p>Создавайте формы отчётов и настраивайте правила чтения Excel.</p></div>
             <div class="actions">
                 <Button label="Обновить" icon="pi pi-refresh" severity="secondary" :loading="loading || filtersLoading" :disabled="deleting" @click="refresh" />
-                <Button label="Создать отчёт" icon="pi pi-plus" :disabled="deleting" @click="router.push('/incoming-reports/new')" />
+                <Button label="Создать отчёт" icon="pi pi-plus" :disabled="deleting || filtersLoading || !!filtersError || selectedPeriodType === null || selectedEnterpriseType === null" @click="createReport" />
             </div>
         </div>
         <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>

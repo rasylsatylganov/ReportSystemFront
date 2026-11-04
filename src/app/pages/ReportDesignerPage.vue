@@ -123,6 +123,14 @@ function applyTemplate(template: ReportTemplate) {
     selected.value = references.value[0] ? { kind: 'reference', key: references.value[0].key } : null;
 }
 
+function selectedTypeId(value: unknown, types: { id: number }[], label: string): number {
+    const id = typeof value === 'string' && /^[1-9]\d*$/.test(value) ? Number(value) : NaN;
+    if (!Number.isSafeInteger(id) || !types.some(type => type.id === id)) {
+        throw new Error(`Не удалось определить ${label}. Вернитесь в список входящих отчётов, выберите тип периода и тип предприятия и нажмите «Создать отчёт».`);
+    }
+    return id;
+}
+
 async function load() {
     const version = ++loadVersion;
     loading.value = true;
@@ -153,8 +161,10 @@ async function load() {
             references.value = [];
             fields.value = [];
             selected.value = null;
-            header.value = { code: '', name: '', typePeriodId: periods[0]?.id ?? null,
-                typeEnterpriseId: enterprises[0]?.id ?? null, begin: 2, end: 1000000 };
+            header.value = { code: '', name: '',
+                typePeriodId: selectedTypeId(route.query.typePeriodId, periods, 'тип периода'),
+                typeEnterpriseId: selectedTypeId(route.query.typeEnterpriseId, enterprises, 'тип предприятия'),
+                begin: 2, end: 1000000 };
         }
         if (version !== loadVersion) return;
         cleanSignature.value = signature.value;
@@ -212,6 +222,31 @@ function reorder(direction: -1 | 1) {
     neighbor.orderSort = previous;
 }
 
+function columnOrderErrors(): string[] {
+    const entries = [
+        ...verticalReferences.value.map(ref => ({
+            name: `Вертикальный справочник «${refName(ref)}»`, column: ref.indexNum,
+        })),
+        ...horizontalReferences.value.flatMap(ref => childFields(ref).map(field => ({
+            name: `Поле «${fieldName(field)}» справочника «${refName(ref)}»`, column: field.column,
+        }))),
+    ];
+    const errors: string[] = [];
+    let previous: { name: string; column: number } | undefined;
+    for (const entry of entries) {
+        const column = entry.column;
+        if (typeof column !== 'number' || !Number.isInteger(column) || column < 1 || column > 16384) {
+            errors.push(`${entry.name}: номер столбца Excel должен быть целым числом от 1 до 16384.`);
+            continue;
+        }
+        if (previous && column <= previous.column) {
+            errors.push(`${entry.name}: номер столбца Excel (${column}) должен быть больше, чем у предыдущего элемента ${previous.name} (${previous.column}).`);
+        }
+        previous = { name: entry.name, column };
+    }
+    return errors;
+}
+
 const localErrors = computed(() => {
     const errors: string[] = [];
     if (!header.value.code.trim()) errors.push('Введите код отчёта.');
@@ -245,6 +280,7 @@ const localErrors = computed(() => {
         if (field.itemId && itemIds.has(field.itemId)) errors.push('Значение справочника добавлено дважды.');
         if (field.itemId) itemIds.add(field.itemId);
     }
+    errors.push(...columnOrderErrors());
     return [...new Set(errors)];
 });
 function payload(): ReportTemplateRequest {
@@ -314,8 +350,8 @@ onBeforeUnmount(() => { ++loadVersion; window.removeEventListener('beforeunload'
                 <div class="parameter-grid">
                     <div class="control"><label for="report-code">Код *</label><InputText id="report-code" v-model="header.code" :maxlength="50" :disabled="disabled" /></div>
                     <div class="control name-control"><label for="report-name">Наименование *</label><InputText id="report-name" v-model="header.name" :maxlength="300" :disabled="disabled" /></div>
-                    <div class="control"><label for="report-period">Тип периода *</label><Select input-id="report-period" v-model="header.typePeriodId" :options="periodTypes" option-label="nameTypePeriod" option-value="id" placeholder="Выберите тип" :disabled="disabled || currentId !== null" /></div>
-                    <div class="control"><label for="report-enterprise">Тип предприятия *</label><Select input-id="report-enterprise" v-model="header.typeEnterpriseId" :options="enterpriseTypes" option-label="nameTypeEnterprise" option-value="id" placeholder="Выберите тип" :disabled="disabled || currentId !== null" /></div>
+                    <div class="control"><label for="report-period">Тип периода *</label><Select input-id="report-period" v-model="header.typePeriodId" :options="periodTypes" option-label="nameTypePeriod" option-value="id" placeholder="Выберите тип" disabled /></div>
+                    <div class="control"><label for="report-enterprise">Тип предприятия *</label><Select input-id="report-enterprise" v-model="header.typeEnterpriseId" :options="enterpriseTypes" option-label="nameTypeEnterprise" option-value="id" placeholder="Выберите тип" disabled /></div>
                 </div>
                 <div class="scan-range"><span>Просмотр строк Excel:</span>
                     <label for="report-begin">с</label><InputNumber input-id="report-begin" v-model="header.begin" :min="1" :max="1048576" :use-grouping="false" :disabled="disabled" />
