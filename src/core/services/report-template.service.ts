@@ -19,6 +19,26 @@ export const reportTemplateService = {
     create(data: ReportTemplateRequest): Promise<ReportTemplate> {
         return http(URL, { method: 'POST', body: JSON.stringify(data) });
     },
+    async copy(id: number, typePeriodId: number, typeEnterpriseId: number): Promise<ReportTemplate> {
+        const source = await reportTemplateService.get(id);
+        const report = source.report;
+        return reportTemplateService.create({
+            report: {
+                codeReportIn: report.codeReportIn, nameReportIn: report.nameReportIn,
+                typePeriod: { id: typePeriodId }, typeEnterprise: { id: typeEnterpriseId },
+                indexRowScanBegin: report.indexRowScanBegin, indexRowScanEnd: report.indexRowScanEnd,
+            },
+            references: source.references.map(ref => ({
+                id: null, referenceId: ref.reference.id, typePositionId: ref.typePosition.id,
+                indexNum: ref.indexNum, orderSort: ref.orderSort,
+            })),
+            fields: source.fields.map(field => ({
+                id: null, referenceItemId: field.referenceItem.id, typeFieldValueId: field.typeFieldValue.id,
+                indexColumn: field.indexColumn, orderSort: field.orderSort, isRequired: field.isRequired,
+            })),
+            revision: null,
+        });
+    },
     update(id: number, data: ReportTemplateRequest): Promise<ReportTemplate> {
         return http(`${URL}/${id}`, { method: 'PUT', body: JSON.stringify(data) });
     },

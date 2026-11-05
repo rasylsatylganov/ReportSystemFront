@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import Button from 'primevue/button';
 import Column from 'primevue/column';
@@ -31,7 +31,28 @@ const selectedPeriodType = ref<number | null>(null);
 const selectedEnterpriseType = ref<number | null>(null);
 const filtersLoading = ref(false);
 const filtersError = ref('');
+const success = ref('');
+const copyVisible = ref(false);
+const copying = ref(false);
+const copyLoading = ref(false);
+const copyError = ref('');
+const sourcePeriodType = ref<number | null>(null);
+const sourceEnterpriseType = ref<number | null>(null);
+const sourceReportId = ref<number | null>(null);
+const sourceReports = ref<IncomingReport[]>([]);
+const copyTarget = ref<{ periodTypeId: number; enterpriseTypeId: number } | null>(null);
+const copyTargetLabel = computed(() => {
+    const target = copyTarget.value;
+    if (!target) return '';
+    const period = periodTypes.value.find(type => type.id === target.periodTypeId)?.nameTypePeriod;
+    const enterprise = enterpriseTypes.value.find(type => type.id === target.enterpriseTypeId)?.nameTypeEnterprise;
+    return `${period} / ${enterprise}`;
+});
+const sourceReportOptions = computed(() => sourceReports.value.map(report => ({
+    id: report.id, label: `${report.nameReportIn} (${report.codeReportIn})`,
+})));
 let version = 0;
+let copyVersion = 0;
 
 async function load() {
     const current = ++version;
@@ -124,8 +145,64 @@ function createReport() {
         query: { typePeriodId: String(selectedPeriodType.value), typeEnterpriseId: String(selectedEnterpriseType.value) },
     });
 }
+async function loadCopyReports() {
+    const current = ++copyVersion;
+    const periodType = sourcePeriodType.value;
+    const enterpriseType = sourceEnterpriseType.value;
+    sourceReportId.value = null;
+    sourceReports.value = [];
+    copyError.value = '';
+    copyLoading.value = false;
+    if (periodType === null || enterpriseType === null) return;
+    copyLoading.value = true;
+    try {
+        const result = await allPages((page, size) =>
+            reportTemplateService.list(page, size, periodType, enterpriseType));
+        if (current === copyVersion) sourceReports.value = result;
+    } catch (cause) {
+        if (current === copyVersion) {
+            copyError.value = cause instanceof Error ? cause.message : 'Не удалось загрузить исходные отчёты.';
+        }
+    } finally {
+        if (current === copyVersion) copyLoading.value = false;
+    }
+}
+function openCopy() {
+    if (deleting.value || copying.value || filtersLoading.value || filtersError.value ||
+        selectedPeriodType.value === null || selectedEnterpriseType.value === null) return;
+    copyTarget.value = { periodTypeId: selectedPeriodType.value, enterpriseTypeId: selectedEnterpriseType.value };
+    sourcePeriodType.value = selectedPeriodType.value;
+    sourceEnterpriseType.value = selectedEnterpriseType.value;
+    success.value = '';
+    copyVisible.value = true;
+    void loadCopyReports();
+}
+function closeCopy() {
+    if (copying.value) return;
+    copyVisible.value = false;
+    ++copyVersion;
+    copyLoading.value = false;
+}
+async function copyReport() {
+    const target = copyTarget.value;
+    const id = sourceReportId.value;
+    if (copying.value || copyLoading.value || !target || id === null ||
+        !sourceReports.value.some(report => report.id === id)) return;
+    copying.value = true;
+    copyError.value = '';
+    try {
+        const result = await reportTemplateService.copy(id, target.periodTypeId, target.enterpriseTypeId);
+        success.value = `Отчёт «${result.report.nameReportIn}» (${result.report.codeReportIn}) скопирован в ${copyTargetLabel.value}.`;
+        first.value = 0;
+        await load();
+        copyVisible.value = false;
+        ++copyVersion;
+    } catch (cause) {
+        copyError.value = cause instanceof Error ? cause.message : 'Не удалось скопировать отчёт.';
+    } finally { copying.value = false; }
+}
 onMounted(refresh);
-onBeforeUnmount(() => { ++version; });
+onBeforeUnmount(() => { ++version; ++copyVersion; });
 </script>
 
 <template>
@@ -133,11 +210,13 @@ onBeforeUnmount(() => { ++version; });
         <div class="toolbar">
             <div><h1>Входящие отчёты</h1><p>Создавайте формы отчётов и настраивайте правила чтения Excel.</p></div>
             <div class="actions">
-                <Button label="Обновить" icon="pi pi-refresh" severity="secondary" :loading="loading || filtersLoading" :disabled="deleting" @click="refresh" />
-                <Button label="Создать отчёт" icon="pi pi-plus" :disabled="deleting || filtersLoading || !!filtersError || selectedPeriodType === null || selectedEnterpriseType === null" @click="createReport" />
+                <Button label="Обновить" icon="pi pi-refresh" severity="secondary" :loading="loading || filtersLoading" :disabled="deleting || copying" @click="refresh" />
+                <Button label="Создать отчёт" icon="pi pi-plus" :disabled="deleting || copying || filtersLoading || !!filtersError || selectedPeriodType === null || selectedEnterpriseType === null" @click="createReport" />
+                <Button label="Создать отчёт из" icon="pi pi-plus" :disabled="deleting || copying || filtersLoading || !!filtersError || selectedPeriodType === null || selectedEnterpriseType === null" @click="openCopy" />
             </div>
         </div>
         <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
+        <Message v-if="success" severity="success" :closable="false">{{ success }}</Message>
         <Message v-if="filtersError" severity="error" :closable="false">{{ filtersError }} Нажмите «Обновить».</Message>
         <section class="filter-panel" aria-label="Фильтры входящих отчётов">
             <div class="filter-title"><i class="pi pi-filter" aria-hidden="true"></i><h2>Фильтр</h2></div>
@@ -145,13 +224,13 @@ onBeforeUnmount(() => { ++version; });
                 <div class="filter-field"><label for="reports-period-type">Типы периодов</label>
                     <Select input-id="reports-period-type" v-model="selectedPeriodType" :options="periodTypes"
                             option-label="nameTypePeriod" option-value="id" placeholder="Выберите тип периода" filter
-                            :loading="filtersLoading" :disabled="deleting || filtersLoading || !!filtersError"
+                            :loading="filtersLoading" :disabled="deleting || copying || filtersLoading || !!filtersError"
                             empty-filter-message="Типы периодов не найдены" @change="changeFilter" />
                 </div>
                 <div class="filter-field"><label for="reports-enterprise-type">Типы предприятий</label>
                     <Select input-id="reports-enterprise-type" v-model="selectedEnterpriseType" :options="enterpriseTypes"
                             option-label="nameTypeEnterprise" option-value="id" placeholder="Выберите тип предприятия" filter
-                            :loading="filtersLoading" :disabled="deleting || filtersLoading || !!filtersError"
+                            :loading="filtersLoading" :disabled="deleting || copying || filtersLoading || !!filtersError"
                             empty-filter-message="Типы предприятий не найдены" @change="changeFilter" />
                 </div>
             </div>
@@ -175,6 +254,41 @@ onBeforeUnmount(() => { ++version; });
                         @click="deleteTarget = data; deleteError = ''" />
             </div></template></Column>
         </DataTable>
+        <Dialog :visible="copyVisible" header="Создать отчёт из" modal :style="{ width: '36rem' }"
+                :breakpoints="{ '640px': '95vw' }" :closable="!copying" :close-on-escape="!copying"
+                @update:visible="value => { if (!value) closeCopy(); }">
+            <div class="copy-fields">
+                <p>Копия будет создана для: <strong>{{ copyTargetLabel }}</strong>.</p>
+                <div class="filter-field"><label for="copy-period-type">Выберите тип периода</label>
+                    <Select input-id="copy-period-type" v-model="sourcePeriodType" :options="periodTypes"
+                            option-label="nameTypePeriod" option-value="id" placeholder="Выберите тип периода" filter
+                            :disabled="copying" @change="loadCopyReports" />
+                </div>
+                <div class="filter-field"><label for="copy-enterprise-type">Выберите тип предприятия</label>
+                    <Select input-id="copy-enterprise-type" v-model="sourceEnterpriseType" :options="enterpriseTypes"
+                            option-label="nameTypeEnterprise" option-value="id" placeholder="Выберите тип предприятия" filter
+                            :disabled="copying" @change="loadCopyReports" />
+                </div>
+                <div class="filter-field"><label for="copy-source-report">Выберите отчёт</label>
+                    <Select input-id="copy-source-report" v-model="sourceReportId" :options="sourceReportOptions"
+                            option-label="label" option-value="id" placeholder="Выберите отчёт" filter
+                            :loading="copyLoading" :disabled="copying || copyLoading || !sourceReports.length"
+                            empty-filter-message="Отчёты не найдены" />
+                </div>
+                <Message v-if="copyError" severity="error" :closable="false">{{ copyError }}</Message>
+                <Button v-if="copyError && !sourceReports.length" label="Повторить загрузку" icon="pi pi-refresh"
+                        severity="secondary" :disabled="copying || copyLoading" @click="loadCopyReports" />
+                <Message v-if="!copyLoading && !copyError && sourcePeriodType && sourceEnterpriseType && !sourceReports.length"
+                         severity="info" :closable="false">Для выбранных типов исходные отчёты не найдены.</Message>
+                <small class="copy-note">Скопируются код, наименование и вся структура отчёта без загруженных данных.
+                    В целевой паре типов код отчёта должен быть свободен.</small>
+            </div>
+            <template #footer>
+                <Button label="Отмена" severity="secondary" :disabled="copying" @click="closeCopy" />
+                <Button label="Скопировать" icon="pi pi-copy" :loading="copying"
+                        :disabled="copying || copyLoading || sourceReportId === null" @click="copyReport" />
+            </template>
+        </Dialog>
         <Dialog :visible="!!deleteTarget" header="Удаление входящего отчёта" modal :style="{ width: '32rem' }"
                 :breakpoints="{ '640px': '95vw' }" :closable="!deleting" :close-on-escape="!deleting"
                 @update:visible="value => { if (!value && !deleting) deleteTarget = null; }">
@@ -192,7 +306,10 @@ onBeforeUnmount(() => { ++version; });
 <style scoped>
 .reports-page { display: flex; flex-direction: column; gap: 20px; }
 .toolbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; }
-.actions { display: flex; align-items: center; gap: 8px; }
+.actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.copy-fields { display: flex; flex-direction: column; gap: 16px; }
+.copy-fields p { margin: 0; }
+.copy-note { color: var(--p-text-muted-color); line-height: 1.5; }
 .filter-panel { padding: 18px 20px; background: var(--p-content-background); border: 1px solid var(--app-border); border-radius: 6px; }
 .filter-title { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; color: var(--app-brand); }
 .filter-title h2 { margin: 0; font-size: 16px; }
