@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router';
 import HomePage from '@/app/pages/HomePage.vue';
 import IncomingReportsPage from '@/app/pages/IncomingReportsPage.vue';
 import ReportDesignerPage from '@/app/pages/ReportDesignerPage.vue';
+import IncomingReportViewPage from '@/app/pages/IncomingReportViewPage.vue';
 import DrTypePeriodPage from '@/app/pages/DrTypePeriodPage.vue';
 import DrPeriodPage from '@/app/pages/DrPeriodPage.vue';
 import DrTypeEnterprisePage from '@/app/pages/DrTypeEnterprisePage.vue';
@@ -14,6 +15,11 @@ import DrReferenceItemPage from '@/app/pages/DrReferenceItemPage.vue';
 const router = createRouter({
     history: createWebHistory(import.meta.env.BASE_URL),
     routes: [
+        {
+            path: '/reports/incoming',
+            name: 'incoming-report-view',
+            component: IncomingReportViewPage,
+        },
         {
             path: '/',
             name: 'home',
