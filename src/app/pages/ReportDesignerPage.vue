@@ -58,7 +58,7 @@ const dirty = computed(() => ready.value && signature.value !== cleanSignature.v
 
 function message(cause: unknown) { return cause instanceof Error ? cause.message : 'Не удалось выполнить операцию.'; }
 function horizontal(ref: EditorReference) {
-    const name = lookups.value.positions.find(position => position.id === ref.positionId)?.nameTypePosition.toLowerCase() ?? '';
+    const name = lookups.value.positions.find(position => position.id === ref.positionId)?.nameTypePosition.trim().toLowerCase() ?? '';
     return name.startsWith('горизонт') || name === 'horizontal';
 }
 function columnName(value: number | null): string {
@@ -180,10 +180,19 @@ function freeColumn() {
     while (used.has(column) && column < 16384) column++;
     return column;
 }
-function addReference() {
-    const position = lookups.value.positions.find(item => item.nameTypePosition.toLowerCase().startsWith('вертик'));
+function addReference(layout: 'vertical' | 'horizontal') {
+    const position = lookups.value.positions.find(item => {
+        const name = item.nameTypePosition.trim().toLowerCase();
+        return name === layout || name.startsWith(layout === 'vertical' ? 'вертик' : 'горизонт');
+    });
+    if (!position) {
+        error.value = layout === 'vertical'
+            ? 'В справочнике расположений отсутствует вертикальное расположение.'
+            : 'В справочнике расположений отсутствует горизонтальное расположение.';
+        return;
+    }
     const ref: EditorReference = { key: ++keySequence, id: null, referenceId: null,
-        positionId: position?.id ?? lookups.value.positions[0]?.id ?? null, indexNum: freeColumn(), orderSort: references.value.length + 1 };
+        positionId: position.id, indexNum: layout === 'horizontal' ? 1 : freeColumn(), orderSort: references.value.length + 1 };
     references.value.push(ref);
     select('reference', ref.key);
 }
@@ -364,7 +373,7 @@ onBeforeUnmount(() => { ++loadVersion; window.removeEventListener('beforeunload'
                     <p class="muted">Выберите элемент, чтобы настроить его справа.</p>
                     <section class="structure-section" aria-labelledby="report-references-title">
                         <h3 id="report-references-title">Вертикальные сгруппированные справочники</h3>
-                        <Button label="Добавить справочник" icon="pi pi-plus" outlined :disabled="disabled" @click="addReference" />
+                        <Button label="Добавить справочник" icon="pi pi-plus" outlined :disabled="disabled" @click="addReference('vertical')" />
                         <p v-if="!verticalReferences.length" class="muted">Вертикальные справочники пока не добавлены.</p>
                         <div class="structure-list">
                             <button v-for="ref in verticalReferences" :key="ref.key" type="button" class="structure-node"
@@ -377,6 +386,7 @@ onBeforeUnmount(() => { ++loadVersion; window.removeEventListener('beforeunload'
                     </section>
                     <section class="structure-section" aria-labelledby="report-fields-title">
                         <h3 id="report-fields-title">Горизонтальные значение справочников</h3>
+                        <Button label="Добавить справочник" icon="pi pi-plus" outlined :disabled="disabled" @click="addReference('horizontal')" />
                         <p v-if="!horizontalReferences.length" class="muted">Горизонтальные справочники пока не добавлены.</p>
                         <div v-for="ref in horizontalReferences" :key="ref.key" class="structure-list">
                             <button type="button" class="structure-node"
@@ -404,7 +414,7 @@ onBeforeUnmount(() => { ++loadVersion; window.removeEventListener('beforeunload'
                         <div class="control"><label for="node-reference">Справочник *</label><Select input-id="node-reference" v-model="selectedReference.referenceId" :options="availableReferences(selectedReference)" option-label="nameReference" option-value="id" filter placeholder="Выберите справочник"
                             :disabled="disabled || selectedReference.id !== null || childFields(selectedReference).length > 0" /></div>
                         <small class="muted">Для замены справочника с полями удалите элемент и добавьте новый.</small>
-                        <div class="control"><label for="node-position">Расположение *</label><Select input-id="node-position" v-model="selectedReference.positionId" :options="lookups.positions" option-label="nameTypePosition" option-value="id" :disabled="disabled || childFields(selectedReference).length > 0" /></div>
+                        <div class="control"><label for="node-position">Расположение *</label><Select input-id="node-position" :model-value="selectedReference.positionId" :options="lookups.positions.filter(position => position.id === selectedReference?.positionId)" option-label="nameTypePosition" option-value="id" disabled /></div>
                         <div class="control"><label for="node-index">{{ horizontal(selectedReference) ? 'Номер строки Excel *' : 'Номер столбца Excel *' }}</label><InputNumber input-id="node-index" v-model="selectedReference.indexNum" :min="1" :max="horizontal(selectedReference) ? 1048576 : 16384" :use-grouping="false" :disabled="disabled" />
                             <small v-if="!horizontal(selectedReference)">Столбец {{ columnName(selectedReference.indexNum) }}</small></div>
                         <div class="control"><label for="node-order">Порядок отображения</label><InputNumber input-id="node-order" v-model="selectedReference.orderSort" :min="0" :max="9999999999" :use-grouping="false" :disabled="disabled" /></div>
