@@ -4,8 +4,10 @@ import Button from 'primevue/button';
 import Message from 'primevue/message';
 import Paginator from 'primevue/paginator';
 import IncomingReportTable from '@/app/components/IncomingReportTable.vue';
+import ExcelUploadDialog from '@/app/components/ExcelUploadDialog.vue';
 import type { DrTypePeriod } from '@/core/models/dr-type-period.model';
 import type { DrTypeEnterprise } from '@/core/models/dr-type-enterprise.model';
+import type { IncomingReportImportResult } from '@/core/models/incoming-report-import.model';
 import type { IncomingReportView } from '@/core/models/incoming-report-view.model';
 import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS } from '@/core/models/page.model';
 import { drTypePeriodService } from '@/core/services/dr-type-period.service';
@@ -13,6 +15,7 @@ import { drTypeEnterpriseService } from '@/core/services/dr-type-enterprise.serv
 import { allPages } from '@/core/services/report-template.service';
 import { incomingReportViewService, type IncomingReportSubmission, type SubmittedIncomingReport } from '@/core/services/incoming-report-view.service';
 
+const uploadVisible = ref(false);
 const periodTypes = ref<DrTypePeriod[]>([]);
 const enterpriseTypes = ref<DrTypeEnterprise[]>([]);
 const selectedPeriodTypes = ref<number[]>([]);
@@ -180,16 +183,26 @@ async function refresh() {
         if (version === catalogVersion) catalogsError.value = message(cause);
     } finally { if (version === catalogVersion) catalogsLoading.value = false; }
 }
+async function imported(result: IncomingReportImportResult) {
+    selectedPeriodTypes.value = [result.typePeriodId];
+    selectedEnterpriseTypes.value = [result.typeEnterpriseId];
+    search.value = '';
+    await loadSubmissions();
+}
 onMounted(refresh);
 onBeforeUnmount(() => { clearTimeout(searchTimer); ++catalogVersion; ++submissionVersion; ++reportVersion; ++viewVersion; });
 </script>
 
 <template>
     <div class="report-browser">
+        <ExcelUploadDialog v-model:visible="uploadVisible" @imported="imported" />
         <header class="page-heading">
             <div><p class="eyebrow">ОТЧЁТЫ</p><h1>Входящие отчёты</h1>
                 <p class="muted">Выберите период и предприятие, затем откройте сданный отчёт.</p></div>
-            <Button label="Обновить" icon="pi pi-refresh" severity="secondary" outlined :loading="catalogsLoading" @click="refresh" />
+            <div class="heading-actions">
+                <Button label="Загрузить Excel" icon="pi pi-upload" @click="uploadVisible = true" />
+                <Button label="Обновить" icon="pi pi-refresh" severity="secondary" outlined :loading="catalogsLoading" @click="refresh" />
+            </div>
         </header>
         <Message v-if="catalogsError" severity="error" :closable="false">{{ catalogsError }}</Message>
         <div class="browser-row top-row">
@@ -269,6 +282,7 @@ onBeforeUnmount(() => { clearTimeout(searchTimer); ++catalogVersion; ++submissio
 
 <style scoped>
 .report-browser { display: flex; flex-direction: column; gap: 18px; }
+.heading-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .page-heading, .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 h1, h2, p { margin: 0; }
 h1 { font-size: 26px; color: var(--app-brand); letter-spacing: -.5px; }
