@@ -31,6 +31,9 @@ const selectedPeriodType = ref<number | null>(null);
 const selectedEnterpriseType = ref<number | null>(null);
 const filtersLoading = ref(false);
 const filtersError = ref('');
+const pairAccess = ref<{ readOnly: boolean; reason: string | null } | null>(null);
+const mutationsDisabled = computed(() => loading.value || filtersLoading.value || !!filtersError.value ||
+    !!error.value || !pairAccess.value || pairAccess.value.readOnly);
 const success = ref('');
 const copyVisible = ref(false);
 const copying = ref(false);
@@ -56,6 +59,7 @@ let copyVersion = 0;
 
 async function load() {
     const current = ++version;
+    pairAccess.value = null;
     const periodType = selectedPeriodType.value;
     const enterpriseType = selectedEnterpriseType.value;
     if (periodType === null || enterpriseType === null) {
@@ -69,13 +73,18 @@ async function load() {
     error.value = '';
     try {
         let page = Math.floor(first.value / rows.value);
-        let result = await reportTemplateService.list(page, rows.value, periodType, enterpriseType);
+        const [initialPage, access] = await Promise.all([
+            reportTemplateService.list(page, rows.value, periodType, enterpriseType),
+            reportTemplateService.metadataAccess(periodType, enterpriseType),
+        ]);
+        let result = initialPage;
         if (current !== version) return;
         if (page > 0 && page >= result.totalPages) {
             page = Math.max(0, result.totalPages - 1);
             result = await reportTemplateService.list(page, rows.value, periodType, enterpriseType);
             if (current !== version) return;
         }
+        pairAccess.value = access;
         reports.value = result.content;
         first.value = result.page * result.size;
         total.value = result.totalElements;
@@ -126,7 +135,7 @@ async function changePage(event: DataTablePageEvent) {
     await load();
 }
 async function remove() {
-    if (!deleteTarget.value || deleting.value) return;
+    if (!deleteTarget.value || deleting.value || mutationsDisabled.value) return;
     deleting.value = true;
     deleteError.value = '';
     try {
@@ -138,7 +147,7 @@ async function remove() {
     } finally { deleting.value = false; }
 }
 function createReport() {
-    if (deleting.value || filtersLoading.value || filtersError.value ||
+    if (mutationsDisabled.value || deleting.value || filtersLoading.value || filtersError.value ||
         selectedPeriodType.value === null || selectedEnterpriseType.value === null) return;
     void router.push({
         path: '/incoming-reports/new',
@@ -168,7 +177,7 @@ async function loadCopyReports() {
     }
 }
 function openCopy() {
-    if (deleting.value || copying.value || filtersLoading.value || filtersError.value ||
+    if (mutationsDisabled.value || deleting.value || copying.value || filtersLoading.value || filtersError.value ||
         selectedPeriodType.value === null || selectedEnterpriseType.value === null) return;
     copyTarget.value = { periodTypeId: selectedPeriodType.value, enterpriseTypeId: selectedEnterpriseType.value };
     sourcePeriodType.value = selectedPeriodType.value;
@@ -186,7 +195,7 @@ function closeCopy() {
 async function copyReport() {
     const target = copyTarget.value;
     const id = sourceReportId.value;
-    if (copying.value || copyLoading.value || !target || id === null ||
+    if (mutationsDisabled.value || copying.value || copyLoading.value || !target || id === null ||
         !sourceReports.value.some(report => report.id === id)) return;
     copying.value = true;
     copyError.value = '';
@@ -211,12 +220,13 @@ onBeforeUnmount(() => { ++version; ++copyVersion; });
             <div><h1>Входящие отчёты</h1><p>Создавайте формы отчётов и настраивайте правила чтения Excel.</p></div>
             <div class="actions">
                 <Button label="Обновить" icon="pi pi-refresh" severity="secondary" :loading="loading || filtersLoading" :disabled="deleting || copying" @click="refresh" />
-                <Button label="Создать отчёт" icon="pi pi-plus" :disabled="deleting || copying || filtersLoading || !!filtersError || selectedPeriodType === null || selectedEnterpriseType === null" @click="createReport" />
-                <Button label="Создать отчёт из" icon="pi pi-plus" :disabled="deleting || copying || filtersLoading || !!filtersError || selectedPeriodType === null || selectedEnterpriseType === null" @click="openCopy" />
+                <Button label="Создать отчёт" icon="pi pi-plus" :disabled="mutationsDisabled || deleting || copying || selectedPeriodType === null || selectedEnterpriseType === null" @click="createReport" />
+                <Button label="Создать отчёт из" icon="pi pi-plus" :disabled="mutationsDisabled || deleting || copying || selectedPeriodType === null || selectedEnterpriseType === null" @click="openCopy" />
             </div>
         </div>
         <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
         <Message v-if="success" severity="success" :closable="false">{{ success }}</Message>
+        <Message v-if="pairAccess?.readOnly" severity="info" :closable="false">{{ pairAccess.reason }}</Message>
         <Message v-if="filtersError" severity="error" :closable="false">{{ filtersError }} Нажмите «Обновить».</Message>
         <section class="filter-panel" aria-label="Фильтры входящих отчётов">
             <div class="filter-title"><i class="pi pi-filter" aria-hidden="true"></i><h2>Фильтр</h2></div>
@@ -249,8 +259,8 @@ onBeforeUnmount(() => { ++version; ++copyVersion; });
             <Column field="typeEnterprise.nameTypeEnterprise" header="Тип предприятия" />
 
             <Column header="Действия"><template #body="{ data }"><div class="actions">
-                <Button label="Открыть" icon="pi pi-pencil" text :disabled="deleting" @click="router.push(`/incoming-reports/${data.id}`)" />
-                <Button icon="pi pi-trash" text severity="danger" :aria-label="`Удалить ${data.nameReportIn}`" :disabled="deleting"
+                <Button :label="pairAccess?.readOnly ? 'Просмотр' : 'Открыть'" :icon="pairAccess?.readOnly ? 'pi pi-eye' : 'pi pi-pencil'" text :disabled="deleting" @click="router.push(`/incoming-reports/${data.id}`)" />
+                <Button icon="pi pi-trash" text severity="danger" :aria-label="`Удалить ${data.nameReportIn}`" :disabled="deleting || mutationsDisabled"
                         @click="deleteTarget = data; deleteError = ''" />
             </div></template></Column>
         </DataTable>
@@ -286,7 +296,7 @@ onBeforeUnmount(() => { ++version; ++copyVersion; });
             <template #footer>
                 <Button label="Отмена" severity="secondary" :disabled="copying" @click="closeCopy" />
                 <Button label="Скопировать" icon="pi pi-copy" :loading="copying"
-                        :disabled="copying || copyLoading || sourceReportId === null" @click="copyReport" />
+                        :disabled="mutationsDisabled || copying || copyLoading || sourceReportId === null" @click="copyReport" />
             </template>
         </Dialog>
         <Dialog :visible="!!deleteTarget" header="Удаление входящего отчёта" modal :style="{ width: '32rem' }"
@@ -297,7 +307,7 @@ onBeforeUnmount(() => { ++version; ++copyVersion; });
             <p>Отчёт с загруженными данными удалить нельзя.</p>
             <template #footer>
                 <Button label="Отмена" severity="secondary" :disabled="deleting" @click="deleteTarget = null" />
-                <Button label="Удалить" severity="danger" :loading="deleting" @click="remove" />
+                <Button label="Удалить" severity="danger" :loading="deleting" :disabled="mutationsDisabled" @click="remove" />
             </template>
         </Dialog>
     </div>

@@ -23,6 +23,8 @@ const route = useRoute();
 const router = useRouter();
 const loading = ref(false);
 const ready = ref(false);
+const readOnly = ref(false);
+const readOnlyReason = ref<string | null>(null);
 const saving = ref(false);
 const checking = ref(false);
 const error = ref('');
@@ -51,7 +53,8 @@ const selectedField = computed(() => selected.value?.kind === 'field'
     ? fields.value.find(field => field.key === selected.value?.key) : undefined);
 const selectedParent = computed(() => references.value.find(ref => ref.key === selectedField.value?.parentKey));
 const activeReference = computed(() => selectedReference.value ?? selectedParent.value);
-const disabled = computed(() => loading.value || saving.value || checking.value || !ready.value);
+const busy = computed(() => loading.value || saving.value || checking.value || !ready.value);
+const disabled = computed(() => busy.value || readOnly.value);
 const signature = computed(() => JSON.stringify({ header: header.value, references: references.value, fields: fields.value }));
 const cleanSignature = ref('');
 const dirty = computed(() => ready.value && signature.value !== cleanSignature.value);
@@ -107,6 +110,8 @@ async function loadReferenceItems() {
 watch(() => references.value.map(ref => ref.referenceId), loadReferenceItems);
 
 function applyTemplate(template: ReportTemplate) {
+    readOnly.value = template.readOnly;
+    readOnlyReason.value = template.readOnlyReason;
     const report = template.report;
     header.value = { code: report.codeReportIn, name: report.nameReportIn, typePeriodId: report.typePeriod.id,
         typeEnterpriseId: report.typeEnterprise.id, begin: report.indexRowScanBegin, end: report.indexRowScanEnd };
@@ -165,6 +170,10 @@ async function load() {
                 typePeriodId: selectedTypeId(route.query.typePeriodId, periods, 'тип периода'),
                 typeEnterpriseId: selectedTypeId(route.query.typeEnterpriseId, enterprises, 'тип предприятия'),
                 begin: 2, end: 1000000 };
+            const access = await reportTemplateService.metadataAccess(header.value.typePeriodId!, header.value.typeEnterpriseId!);
+            if (version !== loadVersion) return;
+            readOnly.value = access.readOnly;
+            readOnlyReason.value = access.reason;
         }
         if (version !== loadVersion) return;
         cleanSignature.value = signature.value;
@@ -181,6 +190,7 @@ function freeColumn() {
     return column;
 }
 function addReference(layout: 'vertical' | 'horizontal') {
+    if (disabled.value) return;
     const position = lookups.value.positions.find(item => {
         const name = item.nameTypePosition.trim().toLowerCase();
         return name === layout || name.startsWith(layout === 'vertical' ? 'вертик' : 'горизонт');
@@ -197,6 +207,7 @@ function addReference(layout: 'vertical' | 'horizontal') {
     select('reference', ref.key);
 }
 function addField(ref: EditorReference) {
+    if (disabled.value) return;
     const numberType = lookups.value.fieldTypes.find(type => type.codeTypeField === 'NUMBER');
     const field: EditorField = { key: ++keySequence, parentKey: ref.key, id: null, itemId: null,
         typeId: numberType?.id ?? null, column: freeColumn(), orderSort: childFields(ref).length + 1, required: true };
@@ -204,6 +215,7 @@ function addField(ref: EditorReference) {
     select('field', field.key);
 }
 function removeSelected() {
+    if (disabled.value) return;
     if (!selected.value) return;
     if (!window.confirm('Удалить выбранный элемент из структуры? Изменение вступит в силу после сохранения.')) return;
     if (selected.value.kind === 'reference') {
@@ -218,6 +230,7 @@ function removeSelected() {
     success.value = '';
 }
 function reorder(direction: -1 | 1) {
+    if (disabled.value) return;
     const node = selectedField.value ?? selectedReference.value;
     if (!node) return;
     const siblings = selectedField.value ? childFields(selectedParent.value!) :
@@ -343,7 +356,7 @@ onBeforeUnmount(() => { ++loadVersion; window.removeEventListener('beforeunload'
     <div class="designer">
         <div class="designer-toolbar">
             <div><RouterLink to="/incoming-reports" class="back-link">← Входящие отчёты</RouterLink>
-                <h1>Конструктор входящего отчёта</h1><span class="save-state">{{ dirty ? 'Есть несохранённые изменения' : currentId ? 'Структура сохранена' : 'Новый отчёт' }}</span></div>
+                <h1>{{ readOnly ? 'Просмотр метаданных входящего отчёта' : 'Конструктор входящего отчёта' }}</h1><span class="save-state">{{ readOnly ? 'Только просмотр' : dirty ? 'Есть несохранённые изменения' : currentId ? 'Структура сохранена' : 'Новый отчёт' }}</span></div>
             <div class="actions">
                 <Button label="Обновить" icon="pi pi-refresh" severity="secondary" :disabled="saving || checking" :loading="loading" @click="reload" />
                 <Button label="Проверить структуру" icon="pi pi-check-circle" severity="secondary" :loading="checking" :disabled="disabled || itemLoading > 0" @click="check" />
@@ -352,6 +365,7 @@ onBeforeUnmount(() => { ++loadVersion; window.removeEventListener('beforeunload'
         </div>
         <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
         <Message v-if="success" severity="success" :closable="false">{{ success }}</Message>
+        <Message v-if="ready && readOnly" severity="info" :closable="false">{{ readOnlyReason }}</Message>
         <Message v-if="showValidation && localErrors.length" severity="error" :closable="false"><ul><li v-for="item in localErrors" :key="item">{{ item }}</li></ul></Message>
         <Message v-if="loading" severity="info" :closable="false">Загрузка структуры и справочников…</Message>
         <template v-if="ready">
@@ -370,7 +384,7 @@ onBeforeUnmount(() => { ++loadVersion; window.removeEventListener('beforeunload'
             </section>
             <div class="designer-columns">
                 <section class="panel structure"><h2>Структура отчёта</h2>
-                    <p class="muted">Выберите элемент, чтобы настроить его справа.</p>
+                    <p class="muted">{{ readOnly ? 'Выберите элемент, чтобы посмотреть его свойства.' : 'Выберите элемент, чтобы настроить его справа.' }}</p>
                     <section class="structure-section" aria-labelledby="report-references-title">
                         <h3 id="report-references-title">Вертикальные сгруппированные справочники</h3>
                         <Button label="Добавить справочник" icon="pi pi-plus" outlined :disabled="disabled" @click="addReference('vertical')" />
@@ -378,7 +392,7 @@ onBeforeUnmount(() => { ++loadVersion; window.removeEventListener('beforeunload'
                         <div class="structure-list">
                             <button v-for="ref in verticalReferences" :key="ref.key" type="button" class="structure-node"
                                 :class="{ active: activeReference?.key === ref.key }" :aria-pressed="activeReference?.key === ref.key"
-                                :disabled="disabled" @click="select('reference', ref.key)">
+                                :disabled="busy" @click="select('reference', ref.key)">
                                 <span><i class="pi pi-arrows-v"></i> {{ refName(ref) }}</span>
                                 <small>{{ columnName(ref.indexNum) }} · {{ ref.indexNum ?? '—' }}</small>
                             </button>
@@ -391,7 +405,7 @@ onBeforeUnmount(() => { ++loadVersion; window.removeEventListener('beforeunload'
                         <div v-for="ref in horizontalReferences" :key="ref.key" class="structure-list">
                             <button type="button" class="structure-node"
                                 :class="{ active: activeReference?.key === ref.key }" :aria-pressed="activeReference?.key === ref.key"
-                                :disabled="disabled" @click="select('reference', ref.key)">
+                                :disabled="busy" @click="select('reference', ref.key)">
                                 <span><i class="pi pi-arrows-h"></i> {{ refName(ref) }}</span>
                                 <small>Строка {{ ref.indexNum ?? '—' }}</small>
                             </button>
@@ -401,7 +415,7 @@ onBeforeUnmount(() => { ++loadVersion; window.removeEventListener('beforeunload'
                             <button v-for="field in childFields(ref)" :key="field.key" type="button" class="structure-node"
                                 :class="{ active: selected?.kind === 'field' && selected.key === field.key }"
                                 :aria-pressed="selected?.kind === 'field' && selected.key === field.key"
-                                :disabled="disabled" @click="select('field', field.key)">
+                                :disabled="busy" @click="select('field', field.key)">
                                 <span>{{ fieldName(field) }}<b v-if="field.required" title="Обязательное поле"> *</b></span>
                                 <small>{{ columnName(field.column) }} · {{ field.column ?? '—' }}</small>
                             </button>

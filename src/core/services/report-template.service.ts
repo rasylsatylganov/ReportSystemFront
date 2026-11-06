@@ -1,4 +1,4 @@
-import type { DesignerLookups, IncomingReport, ReportTemplate, ReportTemplateRequest } from '@/core/models/report-template.model';
+import type { DesignerLookups, IncomingReport, ReportMetadataAccess, ReportTemplate, ReportTemplateRequest } from '@/core/models/report-template.model';
 import type { PageResult } from '@/core/models/page.model';
 import { http } from './http';
 
@@ -10,6 +10,10 @@ export const reportTemplateService = {
         if (typePeriodId !== null) query.set('typePeriodId', String(typePeriodId));
         if (typeEnterpriseId !== null) query.set('typeEnterpriseId', String(typeEnterpriseId));
         return http(`${URL}?${query}`);
+    },
+    metadataAccess(typePeriodId: number, typeEnterpriseId: number): Promise<ReportMetadataAccess> {
+        const query = new URLSearchParams({ typePeriodId: String(typePeriodId), typeEnterpriseId: String(typeEnterpriseId) });
+        return http(`${URL}/metadata-access?${query}`);
     },
     get(id: number): Promise<ReportTemplate> { return http(`${URL}/${id}`); },
     lookups(): Promise<DesignerLookups> { return http(`${URL}/lookups`); },

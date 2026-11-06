@@ -10,12 +10,15 @@ export interface IncomingReport {
     typePeriod: DrTypePeriod; typeEnterprise: DrTypeEnterprise;
     indexRowScanBegin: number; indexRowScanEnd: number;
 }
+export interface ReportMetadataAccess { readOnly: boolean; reason: string | null }
 export interface ReportTemplate {
     report: IncomingReport;
     references: { id: number; reference: DrReference; typePosition: TypePosition; indexNum: number; orderSort: number | null }[];
     fields: { id: number; referenceItem: DrReferenceItem; typeFieldValue: TypeField; indexColumn: number;
         orderSort: number | null; isRequired: number }[];
     revision: string;
+    readOnly: boolean;
+    readOnlyReason: string | null;
 }
 export interface ReportTemplateRequest {
     report: { codeReportIn: string; nameReportIn: string; typePeriod: { id: number | null };
